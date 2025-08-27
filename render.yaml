@@ -3,7 +3,7 @@ services:
   - type: web
     name: escashop-backend
     env: node
-    plan: starter
+    plan: free
     buildCommand: cd backend && npm ci && npm run build:prod
     startCommand: cd backend && npm start
     healthCheckPath: /health
@@ -18,36 +18,34 @@ services:
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
-      - key: JWT_REFRESH_SECRET  
+      - key: JWT_REFRESH_SECRET
         generateValue: true
       - key: FRONTEND_URL
         value: https://escashop-frontend.onrender.com
       - key: SMS_PROVIDER
         value: vonage
       - key: SMS_ENABLED
-        value: true
+        value: false
       - key: VONAGE_API_KEY
         value: 24580886
-      - key: VONAGE_API_SECRET
-        value: 0YSON3xZYOEWYLyf
       - key: EMAIL_SERVICE_ENABLED
-        value: true
+        value: false
       - key: EMAIL_SERVICE
         value: gmail
       - key: EMAIL_USER
         value: jefor16@gmail.com
-      - key: EMAIL_PASSWORD
-        value: cutbcijqacobypak
 
   # Frontend
   - type: web
     name: escashop-frontend
     env: static
-    buildCommand: cd frontend && npm ci && NODE_ENV=production REACT_APP_API_URL=https://escashop-backend.onrender.com/api REACT_APP_BUILD_TIME=2025-08-18-03-19 npm run build
+    buildCommand: cd frontend && npm ci && npm run build
     publishDir: frontend/build
     envVars:
       - key: NODE_ENV
         value: production
+      - key: REACT_APP_API_URL
+        value: https://escashop-backend.onrender.com
 
 databases:
   - name: escashop-database
