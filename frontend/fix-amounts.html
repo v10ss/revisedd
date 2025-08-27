@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix Transaction Amounts</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 10px 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-warning { background-color: #ffc107; color: black; }
+        .btn-success { background-color: #28a745; color: white; }
+        button:hover { opacity: 0.8; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .loading { display: none; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0; }
+        .stat-card { padding: 15px; border-radius: 8px; text-align: center; }
+        .stat-card.zero { background: #f8d7da; color: #721c24; }
+        .stat-card.valid { background: #d4edda; color: #155724; }
+        .stat-card.total { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Fix Transaction Amounts</h1>
+    <p>This tool will fix transactions that show ₱0.00 by updating them with the correct amounts from customer payment information.</p>
+
+    <div id="authSection" class="section">
+        <h2>🔐 Authentication</h2>
+        <p>You need to be logged in as an admin to use this tool.</p>
+        <input type="text" id="username" placeholder="Admin username" style="width: 200px; padding: 10px; margin: 5px;">
+        <input type="password" id="password" placeholder="Admin password" style="width: 200px; padding: 10px; margin: 5px;">
+        <button onclick="login()" class="btn-primary">Login</button>
+        <div id="authStatus"></div>
+    </div>
+
+    <div id="toolsSection" class="section" style="display: none;">
+        <h2>📊 Diagnostic Tools</h2>
+        
+        <button onclick="checkAmounts()" class="btn-primary">Check Current Status</button>
+        <button onclick="fixAmounts()" class="btn-warning">Fix Zero Amounts</button>
+        <button onclick="refreshTransactions()" class="btn-success">Refresh Page Data</button>
+        
+        <div id="loading" class="loading">⏳ Working...</div>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        let authToken = null;
+        const API_BASE = window.location.origin;
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                showAuthStatus('Please enter username and password', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.access_token) {
+                    authToken = data.access_token;
+                    localStorage.setItem('authToken', authToken);
+                    showAuthStatus(`Logged in as ${data.user.full_name} (${data.user.role})`, 'success');
+                    
+                    if (data.user.role === 'admin') {
+                        document.getElementById('toolsSection').style.display = 'block';
+                        checkAmounts(); // Auto-check status on login
+                    } else {
+                        showAuthStatus('Access denied. Admin role required.', 'error');
+                    }
+                } else {
+                    showAuthStatus(data.message || 'Login failed', 'error');
+                }
+            } catch (error) {
+                showAuthStatus('Login error: ' + error.message, 'error');
+            }
+        }
+
+        async function checkAmounts() {
+            if (!authToken) {
+                alert('Please login first');
+                return;
+            }
+
+            setLoading(true);
+            try {
+                const response = await fetch(`${API_BASE}/api/fix-transactions/check-amounts`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayCheckResults(data);
+                } else {
+                    showResults(data.error || 'Check failed', 'error');
+                }
+            } catch (error) {
+                showResults('Error: ' + error.message, 'error');
+            }
+            setLoading(false);
+        }
+
+        async function fixAmounts() {
+            if (!authToken) {
+                alert('Please login first');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to fix zero transaction amounts? This will update the database.')) {
+                return;
+            }
+
+            setLoading(true);
+            try {
+                const response = await fetch(`${API_BASE}/api/fix-transactions/fix-zero-amounts`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayFixResults(data);
+                } else {
+                    showResults(data.error || 'Fix failed', 'error');
+                }
+            } catch (error) {
+                showResults('Error: ' + error.message, 'error');
+            }
+            setLoading(false);
+        }
+
+        async function refreshTransactions() {
+            window.open(window.location.origin, '_blank');
+        }
+
+        function displayCheckResults(data) {
+            const stats = data.statistics;
+            const needsFix = data.needsFix;
+
+            let html = `
+                <h3>📊 Current Transaction Status</h3>
+                <div class="stats">
+                    <div class="stat-card total">
+                        <h4>Total Transactions</h4>
+                        <p style="font-size: 24px; font-weight: bold;">${stats.totalTransactions}</p>
+                    </div>
+                    <div class="stat-card ${stats.zeroAmountTransactions > 0 ? 'zero' : 'valid'}">
+                        <h4>Zero Amount Transactions</h4>
+                        <p style="font-size: 24px; font-weight: bold;">${stats.zeroAmountTransactions}</p>
+                    </div>
+                    <div class="stat-card valid">
+                        <h4>Valid Transactions</h4>
+                        <p style="font-size: 24px; font-weight: bold;">${stats.validAmountTransactions}</p>
+                    </div>
+                </div>
+
+                <p><strong>Average Amount:</strong> ₱${stats.averageAmount.toFixed(2)}</p>
+                <p><strong>Amount Range:</strong> ₱${stats.minAmount.toFixed(2)} - ₱${stats.maxAmount.toFixed(2)}</p>
+                <p><strong>Needs Fix:</strong> ${needsFix ? '❌ YES' : '✅ NO'}</p>
+            `;
+
+            if (stats.zeroAmountTransactions > 0) {
+                html += `
+                    <h4>🔍 Sample Zero Amount Transactions:</h4>
+                    <pre>${JSON.stringify(data.samples.zeroAmountTransactions, null, 2)}</pre>
+                `;
+            }
+
+            html += `
+                <h4>✅ Sample Valid Transactions:</h4>
+                <pre>${JSON.stringify(data.samples.validTransactions, null, 2)}</pre>
+            `;
+
+            showResults(html, needsFix ? 'error' : 'success');
+        }
+
+        function displayFixResults(data) {
+            let html = `
+                <h3>🎉 Fix Results</h3>
+                <p><strong>Status:</strong> ${data.message}</p>
+                
+                <h4>📊 Before Fix:</h4>
+                <ul>
+                    <li>Total Transactions: ${data.beforeFix.totalTransactions}</li>
+                    <li>Zero Amount Transactions: ${data.beforeFix.zeroAmountTransactions}</li>
+                    <li>Average Amount: ₱${data.beforeFix.averageAmount.toFixed(2)}</li>
+                </ul>
+
+                <h4>📈 After Fix:</h4>
+                <ul>
+                    <li>Total Transactions: ${data.afterFix.totalTransactions}</li>
+                    <li>Remaining Zero Amounts: ${data.afterFix.remainingZeroAmounts}</li>
+                    <li>New Average Amount: ₱${data.afterFix.averageAmount.toFixed(2)}</li>
+                </ul>
+
+                <p><strong>Transactions Fixed:</strong> ${data.fixedCount}</p>
+                <p><strong>Payment Statuses Updated:</strong> ${data.statusUpdateCount}</p>
+            `;
+
+            if (data.sampleAfterFix && data.sampleAfterFix.length > 0) {
+                html += `
+                    <h4>✅ Sample Fixed Transactions:</h4>
+                    <pre>${JSON.stringify(data.sampleAfterFix, null, 2)}</pre>
+                `;
+            }
+
+            showResults(html, 'success');
+        }
+
+        function showAuthStatus(message, type) {
+            document.getElementById('authStatus').innerHTML = `<div class="${type}">${message}</div>`;
+        }
+
+        function showResults(content, type) {
+            document.getElementById('results').innerHTML = `<div class="section ${type}">${content}</div>`;
+        }
+
+        function setLoading(isLoading) {
+            document.getElementById('loading').style.display = isLoading ? 'block' : 'none';
+            
+            // Disable buttons during loading
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = isLoading);
+        }
+
+        // Auto-login if token exists
+        window.onload = function() {
+            const savedToken = localStorage.getItem('authToken');
+            if (savedToken) {
+                authToken = savedToken;
+                document.getElementById('toolsSection').style.display = 'block';
+                showAuthStatus('Using saved authentication token', 'info');
+                checkAmounts(); // Auto-check on page load
+            }
+        };
+    </script>
+</body>
+</html>

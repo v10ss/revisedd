@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production API Debug - ESCASHOP</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+        }
+        .test-section.success {
+            border-color: #4CAF50;
+            background-color: #f8fff8;
+        }
+        .test-section.error {
+            border-color: #f44336;
+            background-color: #fff8f8;
+        }
+        .test-section.warning {
+            border-color: #ff9800;
+            background-color: #fff9f0;
+        }
+        .test-section.info {
+            border-color: #2196F3;
+            background-color: #f8f9ff;
+        }
+        button {
+            background: linear-gradient(45deg, #2196F3 30%, #21CBF3 90%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: linear-gradient(45deg, #1976D2 30%, #0288D1 90%);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-online { background-color: #4CAF50; }
+        .status-offline { background-color: #f44336; }
+        .status-unknown { background-color: #ff9800; }
+        h2 { color: #333; margin-top: 30px; }
+        h3 { color: #555; }
+        input[type="text"], input[type="password"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 300px;
+            margin: 5px;
+        }
+        .credential-section {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ffeaa7;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Production API Debug Tool - ESCASHOP</h1>
+        <p><strong>Purpose:</strong> Diagnose why payment modes show as "Cash" in production</p>
+        
+        <div class="credential-section">
+            <h3>🔐 Authentication Setup</h3>
+            <p>Enter your admin credentials to test authenticated API endpoints:</p>
+            <div>
+                <label>Username/Email:</label><br>
+                <input type="text" id="username" placeholder="admin@escashop.com" value="admin@escashop.com">
+            </div>
+            <div>
+                <label>Password:</label><br>
+                <input type="password" id="password" placeholder="Enter your admin password">
+            </div>
+            <div>
+                <label>Or JWT Token (if you have one):</label><br>
+                <input type="text" id="jwtToken" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+            </div>
+            <button onclick="authenticate()">🔑 Get JWT Token</button>
+            <div id="authResult" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Backend Health Check -->
+        <div class="test-section info" id="healthSection">
+            <h3><span class="status-indicator status-unknown"></span>Backend Health Check</h3>
+            <p>Testing if the production backend is responsive</p>
+            <button onclick="testBackendHealth()">🏥 Test Backend Health</button>
+            <div id="healthResult" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- API Endpoint Tests -->
+        <div class="test-section info" id="transactionApiSection">
+            <h3><span class="status-indicator status-unknown"></span>Transaction API Tests</h3>
+            <p>Testing transaction API endpoints directly</p>
+            <button onclick="testTransactionsList()">📋 Test Transactions List</button>
+            <button onclick="testDailySummary()">📊 Test Daily Summary</button>
+            <div id="transactionApiResult" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Network & CORS Analysis -->
+        <div class="test-section info" id="networkSection">
+            <h3><span class="status-indicator status-unknown"></span>Network & CORS Analysis</h3>
+            <p>Analyzing network connectivity and CORS issues</p>
+            <button onclick="testCorsAndNetwork()">🌐 Test Network & CORS</button>
+            <div id="networkResult" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Payment Mode Data Analysis -->
+        <div class="test-section info" id="paymentModeSection">
+            <h3><span class="status-indicator status-unknown"></span>Payment Mode Data Analysis</h3>
+            <p>Analyzing payment mode data in API responses</p>
+            <button onclick="analyzePaymentModes()">💳 Analyze Payment Modes</button>
+            <div id="paymentModeResult" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Solution Recommendations -->
+        <div class="test-section warning" id="solutionSection" style="display:none;">
+            <h3>💡 Recommended Solutions</h3>
+            <div id="solutionContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'https://escashop-backend.onrender.com/api';
+        let authToken = '';
+
+        // Utility functions
+        function showResult(elementId, content, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.textContent = content;
+            
+            const section = element.closest('.test-section');
+            section.className = `test-section ${type}`;
+            
+            const statusIndicator = section.querySelector('.status-indicator');
+            if (statusIndicator) {
+                statusIndicator.className = `status-indicator status-${type === 'success' ? 'online' : type === 'error' ? 'offline' : 'unknown'}`;
+            }
+        }
+
+        function logResult(elementId, content, append = false) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            if (append) {
+                element.textContent += '\n' + content;
+            } else {
+                element.textContent = content;
+            }
+        }
+
+        // Authentication
+        async function authenticate() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const jwtToken = document.getElementById('jwtToken').value;
+
+            if (jwtToken.trim()) {
+                authToken = jwtToken.trim();
+                showResult('authResult', '✅ Using provided JWT token', 'success');
+                return;
+            }
+
+            if (!username || !password) {
+                showResult('authResult', '❌ Please enter username and password or JWT token', 'error');
+                return;
+            }
+
+            try {
+                showResult('authResult', '🔄 Authenticating...', 'info');
+                
+                const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: username,
+                        password: password
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    authToken = data.token || data.accessToken || data.access_token;
+                    showResult('authResult', `✅ Authentication successful!\nToken: ${authToken.substring(0, 50)}...`, 'success');
+                } else {
+                    const errorText = await response.text();
+                    showResult('authResult', `❌ Authentication failed (${response.status}): ${errorText}`, 'error');
+                }
+            } catch (error) {
+                showResult('authResult', `❌ Authentication error: ${error.message}`, 'error');
+            }
+        }
+
+        // Backend Health Check
+        async function testBackendHealth() {
+            showResult('healthResult', '🔄 Testing backend health...', 'info');
+            
+            try {
+                // Test multiple health endpoints
+                const healthEndpoints = [
+                    '/health',
+                    '/api/health', 
+                    '/',
+                    '/status'
+                ];
+
+                let healthResults = '📊 Backend Health Test Results:\n\n';
+                let anySuccess = false;
+
+                for (const endpoint of healthEndpoints) {
+                    try {
+                        const startTime = Date.now();
+                        const response = await fetch(`https://escashop-backend.onrender.com${endpoint}`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        const duration = Date.now() - startTime;
+                        
+                        if (response.ok) {
+                            const responseText = await response.text();
+                            healthResults += `✅ ${endpoint}: OK (${response.status}) - ${duration}ms\n`;
+                            healthResults += `   Response: ${responseText.substring(0, 100)}...\n\n`;
+                            anySuccess = true;
+                        } else {
+                            healthResults += `⚠️  ${endpoint}: ${response.status} ${response.statusText}\n\n`;
+                        }
+                    } catch (error) {
+                        healthResults += `❌ ${endpoint}: ${error.message}\n\n`;
+                    }
+                }
+
+                // Wake up the backend by hitting the main URL
+                try {
+                    await fetch('https://escashop-backend.onrender.com', { method: 'GET' });
+                    healthResults += '🔄 Attempted to wake up backend service...\n\n';
+                } catch (e) {
+                    healthResults += `🔄 Wake-up attempt failed: ${e.message}\n\n`;
+                }
+
+                showResult('healthResult', healthResults, anySuccess ? 'success' : 'error');
+            } catch (error) {
+                showResult('healthResult', `❌ Health check failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Test Transaction APIs
+        async function testTransactionsList() {
+            if (!authToken) {
+                showResult('transactionApiResult', '❌ Please authenticate first', 'error');
+                return;
+            }
+
+            showResult('transactionApiResult', '🔄 Testing transactions list API...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/transactions`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                let result = `📋 Transactions List API Test:\n\n`;
+                result += `Status: ${response.status} ${response.statusText}\n`;
+
+                if (response.ok) {
+                    const data = await response.json();
+                    result += `✅ API Response received\n`;
+                    result += `Data type: ${typeof data}\n`;
+                    result += `Transactions count: ${Array.isArray(data.transactions) ? data.transactions.length : 'N/A'}\n`;
+                    
+                    if (Array.isArray(data.transactions) && data.transactions.length > 0) {
+                        result += `\n📊 Payment Mode Analysis:\n`;
+                        const paymentModes = {};
+                        
+                        data.transactions.forEach((tx, index) => {
+                            if (index < 5) { // Show first 5 transactions in detail
+                                result += `\nTransaction ${index + 1}:\n`;
+                                result += `  ID: ${tx.id}\n`;
+                                result += `  OR: ${tx.or_number}\n`;
+                                result += `  Amount: ₱${tx.amount}\n`;
+                                result += `  Payment Mode: ${tx.payment_mode}\n`;
+                                result += `  Customer: ${tx.customer_name}\n`;
+                                result += `  Status: ${tx.payment_status}\n`;
+                            }
+                            
+                            // Count payment modes
+                            paymentModes[tx.payment_mode] = (paymentModes[tx.payment_mode] || 0) + 1;
+                        });
+                        
+                        result += `\n💳 Payment Mode Summary:\n`;
+                        Object.entries(paymentModes).forEach(([mode, count]) => {
+                            result += `  ${mode}: ${count} transactions\n`;
+                        });
+                        
+                        if (Object.keys(paymentModes).length === 1 && paymentModes['cash']) {
+                            result += `\n🚨 ISSUE FOUND: All transactions show 'cash' payment mode!\n`;
+                        }
+                    } else {
+                        result += `⚠️ No transactions found in response\n`;
+                    }
+                    
+                    result += `\n📄 Full response preview:\n${JSON.stringify(data, null, 2).substring(0, 500)}...\n`;
+                    showResult('transactionApiResult', result, 'success');
+                } else {
+                    const errorText = await response.text();
+                    result += `❌ API Error: ${errorText}\n`;
+                    showResult('transactionApiResult', result, 'error');
+                }
+            } catch (error) {
+                showResult('transactionApiResult', `❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testDailySummary() {
+            if (!authToken) {
+                showResult('transactionApiResult', '❌ Please authenticate first', 'error');
+                return;
+            }
+
+            logResult('transactionApiResult', '\n🔄 Testing daily summary API...', true);
+            
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const response = await fetch(`${API_BASE_URL}/transactions/reports/daily?date=${today}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                let result = `\n📊 Daily Summary API Test (${today}):\n\n`;
+                result += `Status: ${response.status} ${response.statusText}\n`;
+
+                if (response.ok) {
+                    const data = await response.json();
+                    result += `✅ API Response received\n`;
+                    result += `Total Amount: ₱${data.totalAmount || 0}\n`;
+                    result += `Total Transactions: ${data.totalTransactions || 0}\n`;
+                    
+                    if (data.paymentModeBreakdown) {
+                        result += `\n💳 Payment Mode Breakdown:\n`;
+                        Object.entries(data.paymentModeBreakdown).forEach(([mode, details]) => {
+                            result += `  ${mode}: ₱${details.amount || 0} (${details.count || 0} transactions)\n`;
+                        });
+                    }
+                    
+                    result += `\n📄 Full response:\n${JSON.stringify(data, null, 2)}\n`;
+                } else {
+                    const errorText = await response.text();
+                    result += `❌ API Error: ${errorText}\n`;
+                }
+                
+                logResult('transactionApiResult', result, true);
+            } catch (error) {
+                logResult('transactionApiResult', `\n❌ Daily summary error: ${error.message}`, true);
+            }
+        }
+
+        // Test Network & CORS
+        async function testCorsAndNetwork() {
+            showResult('networkResult', '🔄 Testing network and CORS...', 'info');
+            
+            let result = '🌐 Network & CORS Analysis:\n\n';
+            
+            // Test CORS preflight
+            try {
+                const response = await fetch(`${API_BASE_URL}/transactions`, {
+                    method: 'OPTIONS'
+                });
+                result += `✅ CORS Preflight: ${response.status} ${response.statusText}\n`;
+                result += `Access-Control-Allow-Origin: ${response.headers.get('Access-Control-Allow-Origin')}\n`;
+                result += `Access-Control-Allow-Methods: ${response.headers.get('Access-Control-Allow-Methods')}\n\n`;
+            } catch (error) {
+                result += `❌ CORS Preflight failed: ${error.message}\n\n`;
+            }
+
+            // Test SSL certificate
+            try {
+                const sslResponse = await fetch('https://escashop-backend.onrender.com', {
+                    method: 'GET'
+                });
+                result += `✅ SSL Certificate: Valid (${sslResponse.status})\n`;
+            } catch (error) {
+                result += `❌ SSL Certificate issue: ${error.message}\n`;
+            }
+
+            // Test DNS resolution
+            result += '\n🔍 DNS and Connectivity:\n';
+            result += `Backend URL: ${API_BASE_URL}\n`;
+            result += `Current Time: ${new Date().toISOString()}\n`;
+            result += `User Agent: ${navigator.userAgent}\n`;
+            
+            showResult('networkResult', result, 'info');
+        }
+
+        // Analyze Payment Modes
+        async function analyzePaymentModes() {
+            if (!authToken) {
+                showResult('paymentModeResult', '❌ Please authenticate first', 'error');
+                return;
+            }
+
+            showResult('paymentModeResult', '🔄 Analyzing payment mode data...', 'info');
+            
+            try {
+                // Test both transactions and customers APIs
+                const [transactionsResponse, customersResponse] = await Promise.allSettled([
+                    fetch(`${API_BASE_URL}/transactions`, {
+                        headers: { 'Authorization': `Bearer ${authToken}` }
+                    }),
+                    fetch(`${API_BASE_URL}/customers`, {
+                        headers: { 'Authorization': `Bearer ${authToken}` }
+                    })
+                ]);
+
+                let result = '💳 Payment Mode Data Analysis:\n\n';
+
+                // Analyze transactions
+                if (transactionsResponse.status === 'fulfilled' && transactionsResponse.value.ok) {
+                    const txData = await transactionsResponse.value.json();
+                    if (txData.transactions && Array.isArray(txData.transactions)) {
+                        result += `📋 Transactions Analysis (${txData.transactions.length} transactions):\n`;
+                        const txModes = {};
+                        txData.transactions.forEach(tx => {
+                            txModes[tx.payment_mode] = (txModes[tx.payment_mode] || 0) + 1;
+                        });
+                        Object.entries(txModes).forEach(([mode, count]) => {
+                            result += `  ${mode}: ${count} transactions\n`;
+                        });
+                        result += '\n';
+                    }
+                } else {
+                    result += `❌ Transactions API failed\n\n`;
+                }
+
+                // Analyze customers
+                if (customersResponse.status === 'fulfilled' && customersResponse.value.ok) {
+                    const custData = await customersResponse.value.json();
+                    if (custData.customers && Array.isArray(custData.customers)) {
+                        result += `👥 Customers Analysis (${custData.customers.length} customers):\n`;
+                        const custModes = {};
+                        custData.customers.forEach(cust => {
+                            const mode = cust.payment_info?.payment_mode;
+                            if (mode) {
+                                custModes[mode] = (custModes[mode] || 0) + 1;
+                            }
+                        });
+                        Object.entries(custModes).forEach(([mode, count]) => {
+                            result += `  ${mode}: ${count} customers\n`;
+                        });
+                    }
+                } else {
+                    result += `❌ Customers API failed\n`;
+                }
+
+                // Provide analysis
+                result += '\n🔍 Analysis:\n';
+                result += 'If transactions show only "cash" but customers have various payment modes,\n';
+                result += 'the issue is likely in:\n';
+                result += '1. Transaction creation logic (defaulting to cash)\n';
+                result += '2. Database data inconsistency\n';
+                result += '3. API response mapping\n';
+
+                showResult('paymentModeResult', result, 'info');
+
+                // Show solution recommendations
+                showSolutions();
+            } catch (error) {
+                showResult('paymentModeResult', `❌ Analysis failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Show solution recommendations
+        function showSolutions() {
+            const solutionSection = document.getElementById('solutionSection');
+            const solutionContent = document.getElementById('solutionContent');
+            
+            solutionContent.innerHTML = `
+                <h4>🔧 Based on the test results, try these solutions:</h4>
+                <ol>
+                    <li><strong>Wake up the backend:</strong> The Render.com free tier puts services to sleep. Visit <a href="https://escashop-backend.onrender.com" target="_blank">https://escashop-backend.onrender.com</a> to wake it up.</li>
+                    <li><strong>Check API connectivity:</strong> Ensure your frontend can reach the backend API without CORS issues.</li>
+                    <li><strong>Verify authentication:</strong> Make sure your JWT token is valid and not expired.</li>
+                    <li><strong>Database data integrity:</strong> Run the migration script to fix any payment mode inconsistencies.</li>
+                    <li><strong>Frontend fallback logic:</strong> Update the frontend to handle API failures gracefully.</li>
+                </ol>
+                
+                <h4>🚨 If all transactions show "cash" payment mode:</h4>
+                <p>This indicates the issue is in the backend data or API logic, not the frontend display.</p>
+            `;
+            
+            solutionSection.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

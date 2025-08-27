@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historical Analytics Database Migration Tool</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            margin-bottom: 20px;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 Historical Analytics Database Migration</h1>
+            <p>Use this tool to create the required database tables for the Historical Analytics Dashboard</p>
+        </div>
+
+        <div class="info">
+            <strong>ℹ️ Instructions:</strong>
+            <ol>
+                <li>Enter your admin login credentials below</li>
+                <li>Click "Initialize Database Tables" button</li>
+                <li>Wait for the migration to complete</li>
+                <li>Refresh your Historical Analytics Dashboard page</li>
+            </ol>
+        </div>
+
+        <form id="migrationForm">
+            <div class="form-group">
+                <label for="email">Admin Email:</label>
+                <input type="text" id="email" name="email" required placeholder="admin@example.com">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Admin Password:</label>
+                <input type="password" id="password" name="password" required placeholder="Enter your admin password">
+            </div>
+
+            <button type="submit" id="migrateBtn">
+                🚀 Initialize Database Tables
+            </button>
+        </form>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'https://escashop-backend.onrender.com/api';
+        
+        document.getElementById('migrationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('result');
+            const migrateBtn = document.getElementById('migrateBtn');
+            
+            // Reset result
+            resultDiv.style.display = 'none';
+            migrateBtn.disabled = true;
+            migrateBtn.innerHTML = '🔄 Processing...';
+            
+            try {
+                // Step 1: Login to get auth token
+                console.log('🔑 Logging in...');
+                const loginResponse = await fetch(`${API_BASE_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                if (!loginResponse.ok) {
+                    throw new Error('Login failed. Please check your credentials.');
+                }
+                
+                const loginData = await loginResponse.json();
+                const accessToken = loginData.accessToken;
+                
+                console.log('✅ Login successful');
+                
+                // Step 2: Call migration endpoint
+                console.log('🔧 Initializing database tables...');
+                const migrationResponse = await fetch(`${API_BASE_URL}/analytics/init-historical-tables`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+                
+                const migrationData = await migrationResponse.json();
+                
+                if (migrationResponse.ok && migrationData.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>🎉 Migration Completed Successfully!</h3>
+                        <p><strong>✅ Tables Created:</strong></p>
+                        <ul>
+                            ${migrationData.tablesCreated.map(table => `<li>${table}</li>`).join('')}
+                        </ul>
+                        <p><strong>📈 Indexes Created:</strong> ${migrationData.indexesCreated}</p>
+                        <p><strong>📊 Sample Data Added:</strong> ${migrationData.sampleDataAdded ? 'Yes (30 days)' : 'Already existed'}</p>
+                        <br>
+                        <p><strong>🚀 Next Steps:</strong></p>
+                        <ol>
+                            <li>Go back to your Historical Analytics Dashboard</li>
+                            <li>Refresh the page</li>
+                            <li>The 500 error should now be fixed!</li>
+                        </ol>
+                    `;
+                } else {
+                    throw new Error(migrationData.error || 'Migration failed');
+                }
+                
+            } catch (error) {
+                console.error('Migration error:', error);
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <h3>❌ Migration Failed</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <br>
+                    <p><strong>Troubleshooting:</strong></p>
+                    <ul>
+                        <li>Verify your admin credentials are correct</li>
+                        <li>Make sure the backend deployment is running</li>
+                        <li>Check if you have admin role permissions</li>
+                        <li>Try refreshing this page and trying again</li>
+                    </ul>
+                `;
+            } finally {
+                resultDiv.style.display = 'block';
+                migrateBtn.disabled = false;
+                migrateBtn.innerHTML = '🚀 Initialize Database Tables';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# Handle all SPA routes by returning index.html
+# This works with static hosting on Render, Netlify, etc.
+/reset-password/*    /index.html   200
+/forgot-password    /index.html   200
+/login    /index.html   200
+/admin    /index.html   200
+/admin/*    /index.html   200
+/display    /index.html   200
+/display/*    /index.html   200
+/counters    /index.html   200
+/counters/*    /index.html   200
+/*    /index.html   200

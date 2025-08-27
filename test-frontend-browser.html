@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EscaShop Payment Mode Debug Test</title>
+    <style>
+        body { 
+            font-family: 'Courier New', monospace; 
+            padding: 20px; 
+            background-color: #1e1e1e; 
+            color: #f0f0f0; 
+        }
+        .result { 
+            background: #2d2d2d; 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 8px; 
+            border-left: 4px solid #007acc; 
+        }
+        .error { border-left-color: #e74c3c; }
+        .success { border-left-color: #27ae60; }
+        .warning { border-left-color: #f39c12; }
+        button { 
+            padding: 10px 20px; 
+            margin: 5px; 
+            background: #007acc; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+        }
+        button:hover { background: #005fa3; }
+        pre { 
+            background: #1a1a1a; 
+            padding: 10px; 
+            border-radius: 4px; 
+            overflow-x: auto; 
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 EscaShop Payment Mode Debug Test</h1>
+    <p>This test will check what's actually happening in your frontend when it loads transactions.</p>
+    
+    <div>
+        <button onclick="testLocalAPI()">Test Local API (localhost)</button>
+        <button onclick="testProductionAPI()">Test Production API</button>
+        <button onclick="testMockData()">Test Mock Data Display</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+    
+    <div id="results"></div>
+
+    <script>
+        const results = document.getElementById('results');
+        
+        function log(message, type = 'result') {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = message;
+            results.appendChild(div);
+        }
+        
+        function clearResults() {
+            results.innerHTML = '';
+        }
+        
+        // Mock transactions (from frontend code)
+        const mockTransactions = [
+            {
+                id: 1,
+                customer_id: 1,
+                or_number: '20250108-001',
+                amount: 1500,
+                payment_mode: 'gcash', // Should show as GCash
+                customer_name: 'John Doe',
+                payment_status: 'paid'
+            },
+            {
+                id: 2,
+                customer_id: 2,
+                or_number: '20250108-002',
+                amount: 2500,
+                payment_mode: 'credit_card', // Should show as Credit Card
+                customer_name: 'Jane Smith',
+                payment_status: 'partial'
+            },
+            {
+                id: 3,
+                customer_id: 3,
+                or_number: '20250108-003',
+                amount: 3500,
+                payment_mode: 'cash', // Should show as Cash
+                customer_name: 'Maria Garcia',
+                payment_status: 'unpaid'
+            }
+        ];
+        
+        // Payment mode display logic (from frontend)
+        function getPaymentModeLabel(mode) {
+            switch (mode) {
+                case 'gcash':
+                    return 'GCash';
+                case 'maya':
+                    return 'Maya';
+                case 'bank_transfer':
+                    return 'Bank Transfer';
+                case 'credit_card':
+                    return 'Credit Card';
+                case 'cash':
+                    return 'Cash';
+                default:
+                    return 'Unknown';
+            }
+        }
+        
+        function testMockData() {
+            log('<h3>📊 Mock Data Display Test</h3>');
+            
+            mockTransactions.forEach((transaction, index) => {
+                const label = getPaymentModeLabel(transaction.payment_mode);
+                log(`${index + 1}. ${transaction.or_number} - ${transaction.customer_name}<br>
+                     &nbsp;&nbsp;&nbsp;Raw Payment Mode: "<strong>${transaction.payment_mode}</strong>"<br>
+                     &nbsp;&nbsp;&nbsp;Display Label: "<strong>${label}</strong>"<br>
+                     &nbsp;&nbsp;&nbsp;Amount: ₱${transaction.amount.toLocaleString()}`);
+            });
+            
+            log('<strong>✅ Mock Data Test Complete</strong><br>If you see different payment modes above but all "Cash" in your actual app, the issue is with the API connection.', 'success');
+        }
+        
+        async function testLocalAPI() {
+            log('<h3>🔗 Testing Local API (localhost:5000)</h3>');
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/transactions?limit=3', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('accessToken') || 'TEST_TOKEN'}`
+                    }
+                });
+                
+                log(`Response Status: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`<strong>✅ API Success!</strong><br>Transactions returned: ${data.transactions?.length || 0}`);
+                    
+                    if (data.transactions && data.transactions.length > 0) {
+                        log('<h4>🔍 API Data Analysis:</h4>');
+                        data.transactions.forEach((transaction, index) => {
+                            const label = getPaymentModeLabel(transaction.payment_mode);
+                            log(`${index + 1}. ${transaction.or_number || transaction.id}<br>
+                                 &nbsp;&nbsp;&nbsp;Customer: ${transaction.customer_name || 'N/A'}<br>
+                                 &nbsp;&nbsp;&nbsp;Raw Payment Mode: "<strong>${transaction.payment_mode}</strong>"<br>
+                                 &nbsp;&nbsp;&nbsp;Display Label: "<strong>${label}</strong>"<br>
+                                 &nbsp;&nbsp;&nbsp;Amount: ₱${transaction.amount ? transaction.amount.toLocaleString() : 'N/A'}`);
+                        });
+                        
+                        // Check if all are cash
+                        const allCash = data.transactions.every(t => t.payment_mode === 'cash');
+                        if (allCash) {
+                            log('🚨 <strong>ISSUE FOUND:</strong> All transactions from API show "cash" payment mode!', 'error');
+                        } else {
+                            log('✅ <strong>API Data Looks Good:</strong> Different payment modes detected', 'success');
+                        }
+                    } else {
+                        log('No transactions returned from API', 'warning');
+                    }
+                } else {
+                    const errorText = await response.text();
+                    log(`❌ <strong>API Error:</strong> ${response.status} - ${errorText}`, 'error');
+                    log('This means your frontend will fall back to mock data', 'warning');
+                }
+            } catch (error) {
+                log(`❌ <strong>Network Error:</strong> ${error.message}`, 'error');
+                log('This means your frontend will fall back to mock data', 'warning');
+            }
+        }
+        
+        async function testProductionAPI() {
+            log('<h3>🌐 Testing Production API</h3>');
+            
+            try {
+                const response = await fetch('https://escashop-backend.onrender.com/api/transactions?limit=3', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('accessToken') || 'TEST_TOKEN'}`
+                    }
+                });
+                
+                log(`Response Status: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`<strong>✅ Production API Success!</strong><br>Transactions returned: ${data.transactions?.length || 0}`);
+                    
+                    if (data.transactions && data.transactions.length > 0) {
+                        log('<h4>🔍 Production API Data Analysis:</h4>');
+                        data.transactions.forEach((transaction, index) => {
+                            const label = getPaymentModeLabel(transaction.payment_mode);
+                            log(`${index + 1}. ${transaction.or_number || transaction.id}<br>
+                                 &nbsp;&nbsp;&nbsp;Customer: ${transaction.customer_name || 'N/A'}<br>
+                                 &nbsp;&nbsp;&nbsp;Raw Payment Mode: "<strong>${transaction.payment_mode}</strong>"<br>
+                                 &nbsp;&nbsp;&nbsp;Display Label: "<strong>${label}</strong>"<br>
+                                 &nbsp;&nbsp;&nbsp;Amount: ₱${transaction.amount ? transaction.amount.toLocaleString() : 'N/A'}`);
+                        });
+                        
+                        // Check if all are cash
+                        const allCash = data.transactions.every(t => t.payment_mode === 'cash');
+                        if (allCash) {
+                            log('🚨 <strong>ISSUE FOUND:</strong> All transactions from Production API show "cash" payment mode!', 'error');
+                        } else {
+                            log('✅ <strong>Production API Data Looks Good:</strong> Different payment modes detected', 'success');
+                        }
+                    } else {
+                        log('No transactions returned from Production API', 'warning');
+                    }
+                } else {
+                    const errorText = await response.text();
+                    log(`❌ <strong>Production API Error:</strong> ${response.status} - ${errorText}`, 'error');
+                    log('This means your frontend will fall back to mock data', 'warning');
+                }
+            } catch (error) {
+                log(`❌ <strong>Production Network Error:</strong> ${error.message}`, 'error');
+                log('This means your frontend will fall back to mock data', 'warning');
+            }
+        }
+        
+        // Check localStorage for debugging
+        window.onload = () => {
+            const token = localStorage.getItem('accessToken');
+            if (token) {
+                log(`🔑 <strong>Auth Token Found:</strong> ${token.substring(0, 20)}...`, 'success');
+            } else {
+                log('⚠️ <strong>No Auth Token Found</strong> - API calls may fail', 'warning');
+            }
+        };
+    </script>
+</body>
+</html>

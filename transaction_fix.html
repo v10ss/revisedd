@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Fix Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+        .btn {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 Transaction Fix Tool</h1>
+            <p>Fix transactions with zero amounts in EscaShop</p>
+        </div>
+
+        <div id="loginForm">
+            <h3>Admin Login Required</h3>
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" value="admin@escashop.com" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" value="admin123" required>
+            </div>
+            <button class="btn" onclick="login()">Login</button>
+        </div>
+
+        <div id="fixForm" style="display: none;">
+            <h3>Transaction Fix</h3>
+            <p>Click the button below to fix all transactions with zero amounts.</p>
+            <button class="btn btn-danger" onclick="fixTransactions()">
+                🚨 Fix Zero Amount Transactions
+            </button>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'https://escashop-backend.onrender.com';
+        let authToken = '';
+
+        function showResult(message, type = 'info') {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = `result ${type}`;
+            resultDiv.textContent = message;
+            resultDiv.style.display = 'block';
+        }
+
+        function showLoading(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = 'result info';
+            resultDiv.innerHTML = `<div class="loading"></div> ${message}`;
+            resultDiv.style.display = 'block';
+        }
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            if (!email || !password) {
+                showResult('Please enter email and password', 'error');
+                return;
+            }
+
+            showLoading('Logging in...');
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Login failed: ${response.status} - ${errorText}`);
+                }
+
+                const data = await response.json();
+                authToken = data.token;
+
+                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('fixForm').style.display = 'block';
+                showResult('✅ Login successful! You can now fix transactions.', 'success');
+
+            } catch (error) {
+                showResult(`❌ Login failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function fixTransactions() {
+            if (!authToken) {
+                showResult('Please login first', 'error');
+                return;
+            }
+
+            showLoading('Fixing transactions... This may take a few moments.');
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/admin/fix-transactions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        action: 'fix_balance_amounts'
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Fix failed: ${response.status} - ${errorText}`);
+                }
+
+                const result = await response.json();
+                
+                let resultMessage = '🎉 Transaction Fix Completed!\n\n';
+                resultMessage += `📊 Statistics:\n`;
+                resultMessage += `• Total transactions: ${result.stats.before.total}\n`;
+                resultMessage += `• Fixed amount issues: ${result.stats.fixed_amounts}\n`;
+                resultMessage += `• Fixed balance issues: ${result.stats.fixed_balance}\n\n`;
+
+                if (result.sample_transactions && result.sample_transactions.length > 0) {
+                    resultMessage += `📋 Sample fixed transactions:\n`;
+                    result.sample_transactions.forEach((tx, index) => {
+                        resultMessage += `${index + 1}. ${tx.or_number} - ${tx.customer_name}\n`;
+                        resultMessage += `   Amount: ₱${tx.amount}, Balance: ₱${tx.balance_amount}\n`;
+                    });
+                }
+
+                resultMessage += '\n✅ You can now refresh your Transaction Management page to see the updated amounts!';
+
+                showResult(resultMessage, 'success');
+
+            } catch (error) {
+                showResult(`❌ Fix failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-focus email field
+        document.getElementById('email').focus();
+    </script>
+</body>
+</html>
