@@ -3,7 +3,7 @@ services:
   - type: web
     name: escashop-backend
     env: node
-    plan: free
+    plan: hobby
     buildCommand: cd backend && npm ci && npm run build:prod
     startCommand: cd backend && npm start
     healthCheckPath: /health
@@ -39,7 +39,7 @@ services:
   - type: web
     name: escashop-frontend
     env: node
-    plan: free
+    plan: hobby
     buildCommand: cd frontend && npm ci && npm run build
     startCommand: cd frontend && node server.js
     healthCheckPath: /health
@@ -53,4 +53,4 @@ databases:
   - name: escashop-database
     databaseName: escashop
     user: escashop_user
-    plan: free
+    plan: hobby
