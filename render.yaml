@@ -36,11 +36,16 @@ services:
         value: "jefor16@gmail.com"
 
   # Frontend
-  - type: static
+  - type: web
     name: escashop-frontend
+    env: node
+    plan: free
     buildCommand: cd frontend && npm ci && npm run build
-    staticPublishPath: frontend/build
+    startCommand: cd frontend && node server.js
+    healthCheckPath: /health
     envVars:
+      - key: NODE_ENV
+        value: "production"
       - key: REACT_APP_API_URL
         value: "https://escashop-backend.onrender.com"
 
